@@ -32,21 +32,35 @@ func main() {
 
 	light := blync.NewBlyncLight()
 	time.Sleep(time.Second * 2)
-	light.SetColor(blync.Red)
-	light.Play(52)
+	//flash all lights in order based on USB path
+	light.FlashOrder()
+
+	// set all lights connected to red with music
+	light.SetColor(blync.Red,0)
+	light.Play(52,0)
 	time.Sleep(time.Second * 5)
-	light.SetColor(blync.Blue)
+	light.StopPlay(0)
+
+	//set only first blync light to blue
+	light.SetColor(blync.Blue,1)
 	time.Sleep(time.Second * 5)
-	light.StopPlay()
-	light.Reset()
+
+	//reset all blynclights
+	light.Reset(0)
+
 
 	for i := 0; i < 256; i++ {
-		light.SetColor([3]byte{byte(i), 255 - byte(i), 0x00})
+		light.SetColor([3]byte{byte(i), 255 - byte(i), 0x00},0)
 		time.Sleep(13 * time.Millisecond)
 	}
-	light.SetBlinkRate(blync.BlinkMedium)
+	light.SetBlinkRate(blync.BlinkMedium,0)
 	time.Sleep(time.Second * 5)
-	light.Close()
+	light.Close() //Close always affects all lights
 }
 
 ```
+
+### Note on multiple BlyncLights.
+Blync lights are ordered based on USB ID.  You can use system info based on your OS tools, or call light.flashOrder().
+
+When calling subsequent blynclight functions use 0 to interact with all, or specific ID starting as 1 based on relative order.

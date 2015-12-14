@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/boombuler/hid"
 	"os"
+	"sort"
+	"time"
 )
 
 const (
@@ -35,27 +37,39 @@ func NewBlyncLight() (blync BlyncLight) {
 
 func findDevices() []hid.Device {
 	devices := []hid.Device{}
-	deviceInfos := hid.Devices()
+	allDeviceInfos := hid.Devices()
+	blyncInfos := []hid.DeviceInfo{}
 	for {
-		info, more := <-deviceInfos
+		info, more := <-allDeviceInfos
 		if more {
-			device, error := info.Open()
-			if error != nil {
-				fmt.Println(error)
-			}
 			if !isBlyncDevice(*info) {
-				fmt.Printf("%s %s is not a BlyncLight device.\n", info.Manufacturer, info.Product)
+				//fmt.Printf("%s %s is not a BlyncLight device.\n", info.Manufacturer, info.Product)
 			} else {
-				devices = append(devices, device)
-				fmt.Printf("%s %s is a BlyncLight device.\n", info.Manufacturer, info.Product)
+				blyncInfos = append(blyncInfos, *info)
+				//fmt.Printf("%s %s is a BlyncLight device.\n", info.Manufacturer, info.Product)
+				//fmt.Printf("%s\n",info)
 			}
 		} else {
 			break
 		}
 	}
-	if len(devices) == 0 {
+	if len(blyncInfos) == 0 {
 		fmt.Println("No BlyncLights found.")
 		os.Exit(1)
+	}
+	
+	sort.Sort(byLocation(blyncInfos))
+	
+	for i := 0 ; i < len(blyncInfos); i++ {
+		device, error := blyncInfos[i].Open()
+		if error != nil {
+			fmt.Println(error)
+		}else{
+			fmt.Printf("added usb with path %s as index:%d, ID: %d\n",blyncInfos[i].Path,i,i+1)
+		}
+		
+		devices = append(devices, device)
+		
 	}
 	return devices
 }
@@ -68,50 +82,89 @@ func isBlyncDevice(deviceInfo hid.DeviceInfo) bool {
 	return false
 }
 
-func (b BlyncLight) sendFeatureReport() {
-	for _, device := range b.devices {
-		error := device.Write(b.bytes)
-		if error != nil {
-			fmt.Println(error)
+func (b BlyncLight) sendFeatureReport(id int) {
+	if id == 0 {
+		for _, device := range b.devices {
+			b.write(device)
 		}
+	}else{
+		index := id - 1
+		device := b.devices[index]
+		b.write(device)
+	}
+
+}
+
+func (b BlyncLight) write(device hid.Device){
+	error := device.Write(b.bytes)
+	if error != nil {
+		fmt.Println(error)
 	}
 }
 
-func (b BlyncLight) Close() {
-	b.Reset()
+func (b BlyncLight) Close(id int) {
+	b.Reset(id)
 	for _, device := range b.devices {
 		device.Close()
 	}
 }
 
-func (b BlyncLight) Reset() {
+func (b BlyncLight) Reset(id int) {
 	b.bytes = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x02, 0xFF}
-	b.sendFeatureReport()
+	b.sendFeatureReport(id)
 }
 
 // color[0] = r
 // color[1] = g
 // color[2] = b
-func (b BlyncLight) SetColor(color [3]byte) {
+func (b BlyncLight) SetColor(color [3]byte, id int) {
 	b.bytes[1] = color[0]
 	b.bytes[2] = color[2] // They reverse g and b
 	b.bytes[3] = color[1]
-	b.sendFeatureReport()
+	b.sendFeatureReport(id)
 }
 
-func (b BlyncLight) SetBlinkRate(rate byte) {
+func (b BlyncLight) SetBlinkRate(rate byte, id int) {
 	b.bytes[4] = rate
-	b.sendFeatureReport()
+	b.sendFeatureReport(id)
+}
+
+func (b BlyncLight) FlashOrder(){
+	for i := 0 ; i < len(b.devices); i++ {
+		id := i+1
+		b.SetBlinkRate(BlinkMedium,id)
+		b.SetColor(Red,id)
+		b.sendFeatureReport(id)
+		fmt.Printf("Flashing blync ID: %d\n", id)
+		time.Sleep(time.Second * 2)
+		b.Reset(id)
+	}
 }
 
 //16-30 play a tune single time
 //49-59 plays never ending versions of the tunes
-func (b BlyncLight) Play(mp3 byte) {
+func (b BlyncLight) Play(mp3 byte, id int) {
 	b.bytes[5] = mp3
-	b.sendFeatureReport()
+	b.sendFeatureReport(id)
 }
 
-func (b BlyncLight) StopPlay() {
+func (b BlyncLight) StopPlay(id int) {
 	b.bytes[5] = 0x00
-	b.sendFeatureReport()
+	b.sendFeatureReport(id)
+}
+
+
+// Methods needed for sorting
+type byLocation []hid.DeviceInfo
+
+func (a byLocation) Len() int {
+	return len(a)
+}
+
+func (a byLocation) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func (a byLocation) Less(i, j int) bool {
+	return a[i].Path < a[j].Path
 }
