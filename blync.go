@@ -92,7 +92,6 @@ func (b BlyncLight) sendFeatureReport(id int) {
 		device := b.devices[index]
 		b.write(device)
 	}
-
 }
 
 func (b BlyncLight) write(device hid.Device){
