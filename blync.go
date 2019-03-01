@@ -95,7 +95,7 @@ func (b BlyncLight) sendFeatureReport(id int) {
 }
 
 func (b BlyncLight) write(device hid.Device){
-	error := device.WriteInterrupt(b.bytes)
+	error := device.WriteInterrupt(byte(3),b.bytes)
 	if error != nil {
 		fmt.Println(error)
 	}
